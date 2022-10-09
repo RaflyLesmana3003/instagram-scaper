@@ -5,7 +5,7 @@ import urllib
 import os
 import codecs
 from pathlib import Path
-
+import csv
 import requests
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -146,7 +146,6 @@ class Osintgram:
 
             i = 1
 
-            json_data = {}
             addrs_list = []
 
             for address, time in sort_addresses:
@@ -161,17 +160,14 @@ class Osintgram:
 
                 i = i + 1
 
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_addrs.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
-
-            if self.jsonDump:
-                json_data['address'] = addrs_list
-                json_file_name = self.output_dir + "/" + self.target + "_addrs.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_addrs.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['Post', 'Address', 'time']
+                writer.writerow(data)
+                
+                for address, time in sort_addresses:
+                    writer.writerow([str(i), address, time])
+            
 
             print(t)
         else:
@@ -209,27 +205,17 @@ class Osintgram:
         if counter > 0:
             pc.printout("\nWoohoo! We found " + str(counter) + " captions\n", pc.GREEN)
 
-            file = None
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_captions.txt"
-                file = open(file_name, "w")
 
             for s in captions:
                 print(s + "\n")
 
-                if self.writeFile:
-                    file.write(s + "\n")
-
-            if self.jsonDump:
-                json_data['captions'] = captions
-                json_file_name = self.output_dir + "/" + self.target + "_followings.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
-
-            if file is not None:
-                file.close()
-
+            with open(self.output_dir + "/" + self.target + "_captions.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['caption']
+                writer.writerow(data)
+                
+                for s in captions:
+                    writer.writerow([s])
         else:
             pc.printout("Sorry! No results found :-(\n", pc.RED)
 
@@ -250,20 +236,11 @@ class Osintgram:
             comments_counter += post['comment_count']
             posts += 1
 
-        if self.writeFile:
-            file_name = self.output_dir + "/" + self.target + "_comments.txt"
-            file = open(file_name, "w")
-            file.write(str(comments_counter) + " comments in " + str(posts) + " posts\n")
-            file.close()
+        file_name = self.output_dir + "/" + self.target + "_comments.txt"
+        file = open(file_name, "w")
+        file.write(str(comments_counter) + " comments in " + str(posts) + " posts\n")
+        file.close()
 
-        if self.jsonDump:
-            json_data = {
-                'comment_counter': comments_counter,
-                'posts': posts
-            }
-            json_file_name = self.output_dir + "/" + self.target + "_comments.json"
-            with open(json_file_name, 'w') as f:
-                json.dump(json_data, f)
 
         pc.printout(str(comments_counter), pc.MAGENTA)
         pc.printout(" comments in " + str(posts) + " posts\n")
@@ -275,7 +252,6 @@ class Osintgram:
         pc.printout("Retrieving all comments, this may take a moment...\n")
         data = self.__get_feed__()
         
-        _comments = []
         t = PrettyTable(['POST ID', 'ID', 'Username', 'Comment'])
         t.align["POST ID"] = "l"
         t.align["ID"] = "l"
@@ -287,28 +263,15 @@ class Osintgram:
             comments = self.api.media_n_comments(post_id)
             for comment in comments:
                 t.add_row([post_id, comment.get('user_id'), comment.get('user').get('username'), comment.get('text')])
-                comment = {
-                        "post_id": post_id,
-                        "user_id":comment.get('user_id'), 
-                        "username": comment.get('user').get('username'),
-                        "comment": comment.get('text')
-                    }
-                _comments.append(comment)
         
         print(t)
-        if self.writeFile:
-            file_name = self.output_dir + "/" + self.target + "_comment_data.txt"
-            with open(file_name, 'w') as f:
-                f.write(str(t))
-                f.close()
-        
-        if self.jsonDump:
-            file_name_json = self.output_dir + "/" + self.target + "_comment_data.json"
-            with open(file_name_json, 'w') as f:
-                f.write("{ \"Comments\":[ \n")
-                f.write('\n'.join(json.dumps(comment) for comment in _comments) + ',\n')
-                f.write("]} ")
-
+        with open(self.output_dir + "/" + self.target + "_comment_data.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['POST ID', 'ID', 'Username', 'Comment']
+                writer.writerow(data)
+                
+                for comment in comments:
+                    writer.writerow([post_id, comment.get('user_id'), comment.get('user').get('username'), comment.get('text')])
 
     def get_followers(self):
         if self.check_private_profile():
@@ -348,31 +311,17 @@ class Osintgram:
         t.align["Username"] = "l"
         t.align["Full Name"] = "l"
 
-        json_data = {}
-        followings_list = []
-
         for node in followers:
             t.add_row([str(node['id']), node['username'], node['full_name']])
 
-            if self.jsonDump:
-                follow = {
-                    'id': node['id'],
-                    'username': node['username'],
-                    'full_name': node['full_name']
-                }
-                followings_list.append(follow)
 
-        if self.writeFile:
-            file_name = self.output_dir + "/" + self.target + "_followers.txt"
-            file = open(file_name, "w")
-            file.write(str(t))
-            file.close()
-
-        if self.jsonDump:
-            json_data['followers'] = followers
-            json_file_name = self.output_dir + "/" + self.target + "_followers.json"
-            with open(json_file_name, 'w') as f:
-                json.dump(json_data, f)
+        with open(self.output_dir + "/" + self.target + "_followers.csv", 'w') as file:
+            writer = csv.writer(file)
+            data = ["ID", "Username", "Full Name"]
+            writer.writerow(data)
+            
+            for node in followers:
+                writer.writerow([str(node['id']), node['username'], node['full_name']])
 
         print(t)
 
@@ -413,31 +362,16 @@ class Osintgram:
         t.align["Username"] = "l"
         t.align["Full Name"] = "l"
 
-        json_data = {}
-        followings_list = []
-
         for node in followings:
             t.add_row([str(node['id']), node['username'], node['full_name']])
 
-            if self.jsonDump:
-                follow = {
-                    'id': node['id'],
-                    'username': node['username'],
-                    'full_name': node['full_name']
-                }
-                followings_list.append(follow)
-
-        if self.writeFile:
-            file_name = self.output_dir + "/" + self.target + "_followings.txt"
-            file = open(file_name, "w")
-            file.write(str(t))
-            file.close()
-
-        if self.jsonDump:
-            json_data['followings'] = followings_list
-            json_file_name = self.output_dir + "/" + self.target + "_followings.json"
-            with open(json_file_name, 'w') as f:
-                json.dump(json_data, f)
+        with open(self.output_dir + "/" + self.target + "_followings.csv", 'w') as file:
+            writer = csv.writer(file)
+            data = ["ID", "Username", "Full Name"]
+            writer.writerow(data)
+            
+            for node in followings:
+                writer.writerow([str(node['id']), node['username'], node['full_name']])
 
         print(t)
 
@@ -479,30 +413,19 @@ class Osintgram:
 
             ssort = sorted(hashtag_counter.items(), key=lambda value: value[1], reverse=True)
 
-            file = None
-            json_data = {}
-            hashtags_list = []
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_hashtags.txt"
-                file = open(file_name, "w")
 
             for k, v in ssort:
                 hashtag = str(k.decode('utf-8'))
                 print(str(v) + ". " + hashtag)
-                if self.writeFile:
-                    file.write(str(v) + ". " + hashtag + "\n")
-                if self.jsonDump:
-                    hashtags_list.append(hashtag)
 
-            if file is not None:
-                file.close()
-
-            if self.jsonDump:
-                json_data['hashtags'] = hashtags_list
-                json_file_name = self.output_dir + "/" + self.target + "_hashtags.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_hashtag.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ["count", "hashtag"]
+                writer.writerow(data)
+                
+                for k, v in ssort:
+                    hashtag = str(k.decode('utf-8'))
+                    writer.writerow([str(v), hashtag])
         else:
             pc.printout("Sorry! No results found :-(\n", pc.RED)
 
@@ -601,20 +524,10 @@ class Osintgram:
             like_counter += post['like_count']
             posts += 1
 
-        if self.writeFile:
-            file_name = self.output_dir + "/" + self.target + "_likes.txt"
-            file = open(file_name, "w")
-            file.write(str(like_counter) + " likes in " + str(like_counter) + " posts\n")
-            file.close()
-
-        if self.jsonDump:
-            json_data = {
-                'like_counter': like_counter,
-                'posts': like_counter
-            }
-            json_file_name = self.output_dir + "/" + self.target + "_likes.json"
-            with open(json_file_name, 'w') as f:
-                json.dump(json_data, f)
+        file_name = self.output_dir + "/" + self.target + "_likes.txt"
+        file = open(file_name, "w")
+        file.write(str(like_counter) + " likes in " + str(like_counter) + " posts\n")
+        file.close()
 
         pc.printout(str(like_counter), pc.MAGENTA)
         pc.printout(" likes in " + str(posts) + " posts\n")
@@ -646,23 +559,13 @@ class Osintgram:
 
         if counter > 0:
 
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_mediatype.txt"
-                file = open(file_name, "w")
-                file.write(str(photo_counter) + " photos and " + str(video_counter) + " video posted by target\n")
-                file.close()
+            file_name = self.output_dir + "/" + self.target + "_mediatype.txt"
+            file = open(file_name, "w")
+            file.write(str(photo_counter) + " photos and " + str(video_counter) + " video posted by target\n")
+            file.close()
 
             pc.printout("\nWoohoo! We found " + str(photo_counter) + " photos and " + str(video_counter) +
                         " video posted by target\n", pc.GREEN)
-
-            if self.jsonDump:
-                json_data = {
-                    "photos": photo_counter,
-                    "videos": video_counter
-                }
-                json_file_name = self.output_dir + "/" + self.target + "_mediatype.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
 
         else:
             pc.printout("Sorry! No results found :-(\n", pc.RED)
@@ -695,9 +598,6 @@ class Osintgram:
 
         if len(users) > 0:
             ssort = sorted(users, key=lambda value: value['counter'], reverse=True)
-
-            json_data = {}
-
             t = PrettyTable()
 
             t.field_names = ['Comments', 'ID', 'Username', 'Full Name']
@@ -710,18 +610,13 @@ class Osintgram:
                 t.add_row([str(u['counter']), u['id'], u['username'], u['full_name']])
 
             print(t)
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_users_who_commented.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
-
-            if self.jsonDump:
-                json_data['users_who_commented'] = ssort
-                json_file_name = self.output_dir + "/" + self.target + "_users_who_commented.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_users_who_commented.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['Comments', 'ID', 'Username', 'Full Name']
+                writer.writerow(data)
+                
+                for u in ssort:
+                    writer.writerow([str(u['counter']), u['id'], u['username'], u['full_name']])
         else:
             pc.printout("Sorry! No results found :-(\n", pc.RED)
 
@@ -778,18 +673,14 @@ class Osintgram:
                 t.add_row([str(u['counter']), u['id'], u['username'], u['full_name']])
 
             print(t)
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_users_who_tagged.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
-
-            if self.jsonDump:
-                json_data['users_who_tagged'] = ssort
-                json_file_name = self.output_dir + "/" + self.target + "_users_who_tagged.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_users_who_tagged.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['Photos', 'ID', 'Username', 'Full Name']
+                writer.writerow(data)
+                
+                for u in ssort:
+                    writer.writerow([str(u['counter']), u['id'], u['username'], u['full_name']])
+            
         else:
             pc.printout("Sorry! No results found :-(\n", pc.RED)
 
@@ -819,25 +710,18 @@ class Osintgram:
                 descr = node.get('accessibility_caption')
                 t.add_row([str(count), descr])
 
-                if self.jsonDump:
-                    description = {
-                        'description': descr
-                    }
-                    descriptions_list.append(description)
-
                 count += 1
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_photodes.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
-
-            if self.jsonDump:
-                json_data['descriptions'] = descriptions_list
-                json_file_name = self.output_dir + "/" + self.target + "_descriptions.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_photodes.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['Photo', 'Description']
+                writer.writerow(data)
+                
+                for i in dd:
+                    node = i.get('node')
+                    descr = node.get('accessibility_caption')
+                    writer.writerow([str(count), descr])
+                    count += 1
+            
 
             print(t)
         else:
@@ -1013,32 +897,16 @@ class Osintgram:
 
             pc.printout("\nWoohoo! We found " + str(len(ids)) + " (" + str(counter) + ") users\n", pc.GREEN)
 
-            json_data = {}
-            tagged_list = []
-
             for i in range(len(ids)):
                 t.add_row([post[i], full_name[i], username[i], str(ids[i])])
 
-                if self.jsonDump:
-                    tag = {
-                        'post': post[i],
-                        'full_name': full_name[i],
-                        'username': username[i],
-                        'id': ids[i]
-                    }
-                    tagged_list.append(tag)
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_tagged.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
-
-            if self.jsonDump:
-                json_data['tagged'] = tagged_list
-                json_file_name = self.output_dir + "/" + self.target + "_tagged.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_tagged.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['Posts', 'Full Name', 'Username', 'ID']
+                writer.writerow(data)
+                
+                for i in range(len(ids)):
+                    writer.writerow([post[i], full_name[i], username[i], str(ids[i])])
 
             print(t)
         else:
@@ -1259,17 +1127,14 @@ class Osintgram:
             for node in results:
                 t.add_row([str(node['id']), node['username'], node['full_name'], node['email']])
 
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_fwersemail.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
-
-            if self.jsonDump:
-                json_data['followers_email'] = results
-                json_file_name = self.output_dir + "/" + self.target + "_fwersemail.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_fwersemail.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['ID', 'Username', 'Full Name', 'Email']
+                writer.writerow(data)
+                
+                for node in results:
+                    writer.writerow([str(node['id']), node['username'], node['full_name'], node['email']])
+            
 
             print(t)
         else:
@@ -1365,17 +1230,14 @@ class Osintgram:
             for node in results:
                 t.add_row([str(node['id']), node['username'], node['full_name'], node['email']])
 
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_fwingsemail.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
-
-            if self.jsonDump:
-                json_data['followings_email'] = results
-                json_file_name = self.output_dir + "/" + self.target + "_fwingsemail.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_fwingsemail.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['ID', 'Username', 'Full Name', 'Email']
+                writer.writerow(data)
+                
+                for node in results:
+                    writer.writerow([str(node['id']), node['username'], node['full_name'], node['email']])
+            
 
             print(t)
         else:
@@ -1471,17 +1333,14 @@ class Osintgram:
             for node in results:
                 t.add_row([str(node['id']), node['username'], node['full_name'], node['contact_phone_number']])
 
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_fwingsnumber.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
-
-            if self.jsonDump:
-                json_data['followings_phone_numbers'] = results
-                json_file_name = self.output_dir + "/" + self.target + "_fwingsnumber.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_fwingsnumber.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['ID', 'Username', 'Full Name', 'Phone']
+                writer.writerow(data)
+                
+                for node in results:
+                    writer.writerow([str(node['id']), node['username'], node['full_name'], node['contact_phone_number']])
+            
 
             print(t)
         else:
@@ -1577,18 +1436,14 @@ class Osintgram:
 
             for node in results:
                 t.add_row([str(node['id']), node['username'], node['full_name'], node['contact_phone_number']])
-
-            if self.writeFile:
-                file_name = self.output_dir + "/" + self.target + "_fwersnumber.txt"
-                file = open(file_name, "w")
-                file.write(str(t))
-                file.close()
-
-            if self.jsonDump:
-                json_data['followings_phone_numbers'] = results
-                json_file_name = self.output_dir + "/" + self.target + "_fwerssnumber.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(json_data, f)
+            with open(self.output_dir + "/" + self.target + "_fwersnumber.csv", 'w') as file:
+                writer = csv.writer(file)
+                data = ['ID', 'Username', 'Full Name', 'Phone']
+                writer.writerow(data)
+                
+                for node in results:
+                    writer.writerow([str(node['id']), node['username'], node['full_name'], node['contact_phone_number']])
+            
 
             print(t)
         else:
