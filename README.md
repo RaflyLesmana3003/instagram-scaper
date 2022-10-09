@@ -1,5 +1,5 @@
-# Osintgram 🔎📸
-THIS REPO ONLY UPDATE VERSION OF Osintgram. 
+# Osintgram CSV VERSION
+THIS REPO ONLY UPDATE VERSION OF [Osintgram](https://github.com/Datalux/Osintgrami). 
 OUTPUT WILL BE CSV NOT TXT OR JSON ONLY.
 
 [![version-1.3](https://img.shields.io/badge/version-1.3-green)](https://github.com/Datalux/Osintgram/releases/tag/1.3)
@@ -56,7 +56,7 @@ You can find detailed commands usage [here](doc/COMMANDS.md).
 
 1. Fork/Clone/Download this repo
 
-    `git clone https://github.com/Datalux/Osintgram.git`
+    `git clone https://github.com/RaflyLesmana3003/instagram-scaper`
 
 2. Navigate to the directory
 
@@ -80,10 +80,6 @@ You can find detailed commands usage [here](doc/COMMANDS.md).
 
     * As an interactive prompt `python3 main.py <target username>`
     * Or execute your command straight away `python3 main.py <target username> --command <command>`
-    
-### Use Osintgram v2 (beta)
-You can use Osintgram2 beta just switching to `v2` [branch](https://github.com/Datalux/Osintgram/tree/v2).
-The v2 has some improvements and faster with a new command execution interface. Try it just running `git checkout v2`.
 
 ## Docker Quick Start 🐳
 
@@ -150,35 +146,3 @@ Sample workflow for development:
 2. `make build-run-testing`   - Builds an Runs a container without invoking the `main.py` script. Useful for an `it` Docker session for development
 3. `make cleanup-testing`     - Cleans up the testing container created from `build-run-testing`
 
-## Development version 💻
-
-To use the development version with the latest feature and fixes just switch to `development` branch using Git:
-
-`git checkout development`
-
-and update to last version using:
-
-`git pull origin development`
-
-
-## Updating ⬇️
-
-To update Osintgram with the stable release just pull the latest commit using Git.
-
-1. Make sure you are in the master branch running: `git checkout master`
-2. Download the latest version: `git pull origin master`
-
-
-## Contributing 💡
-
-You can propose a feature request opening an issue or a pull request.
-
-Here is a list of Osintgram's contributors:
-
-<a href="https://github.com/Datalux/Osintgram/graphs/contributors">
-  <img src="https://contributors-img.web.app/image?repo=Datalux/Osintgram" />
-</a>
-
-## External library 🔗
-
-[Instagram API](https://github.com/ping/instagram_private_api)
