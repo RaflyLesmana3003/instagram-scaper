@@ -1,4 +1,6 @@
 # Osintgram 🔎📸
+THIS REPO ONLY UPDATE VERSION OF Osintgram. 
+OUTPUT WILL BE CSV NOT TXT OR JSON ONLY.
 
 [![version-1.3](https://img.shields.io/badge/version-1.3-green)](https://github.com/Datalux/Osintgram/releases/tag/1.3)
 [![GPLv3](https://img.shields.io/badge/license-GPLv3-blue)](https://img.shields.io/badge/license-GPLv3-blue)
@@ -7,10 +9,6 @@
 [![Docker](https://img.shields.io/badge/Docker-Supported-blue)](https://img.shields.io/badge/Docker-Supported-blue)
 
 Osintgram is a **OSINT** tool on Instagram to collect, analyze, and run reconnaissance.
-
-<p align="center">
-<img align="center" src=".img/carbon.png" width="900">
-</p>
 
 Disclaimer: **FOR EDUCATIONAL PURPOSE ONLY! The contributors do not assume any responsibility for the use of this tool.**
 
