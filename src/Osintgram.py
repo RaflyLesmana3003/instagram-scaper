@@ -1,5 +1,8 @@
+from ast import If
 import datetime
+from itertools import count
 import json
+import random
 import sys
 import urllib
 import os
@@ -9,13 +12,13 @@ import csv
 import requests
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
-
+import names
+from random_word import RandomWords
+import time
 from geopy.geocoders import Nominatim
 from instagram_private_api import Client as AppClient
 from instagram_private_api import ClientCookieExpiredError, ClientLoginRequiredError, ClientError, ClientThrottledError
-
 from prettytable import PrettyTable
-
 from src import printcolors as pc
 from src import config
 
@@ -61,34 +64,6 @@ class Osintgram:
         self.following = self.check_following()
         self.__printTargetBanner__()
 
-    def __get_feed__(self):
-        data = []
-
-        result = self.api.user_feed(str(self.target_id))
-        data.extend(result.get('items', []))
-
-        next_max_id = result.get('next_max_id')
-        while next_max_id:
-            results = self.api.user_feed(str(self.target_id), max_id=next_max_id)
-            data.extend(results.get('items', []))
-            next_max_id = results.get('next_max_id')
-
-        return data
-
-    def __get_comments__(self, media_id):
-        comments = []
-
-        result = self.api.media_comments(str(media_id))
-        comments.extend(result.get('comments', []))
-
-        next_max_id = result.get('next_max_id')
-        while next_max_id:
-            results = self.api.media_comments(str(media_id), max_id=next_max_id)
-            comments.extend(results.get('comments', []))
-            next_max_id = results.get('next_max_id')
-
-        return comments
-
     def __printTargetBanner__(self):
         pc.printout("\nLogged as ", pc.GREEN)
         pc.printout(self.api.username, pc.CYAN)
@@ -109,808 +84,6 @@ class Osintgram:
         line = input()
         self.setTarget(line)
         return
-
-    def get_addrs(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for target localizations...\n")
-
-        data = self.__get_feed__()
-
-        locations = {}
-
-        for post in data:
-            if 'location' in post and post['location'] is not None:
-                if 'lat' in post['location'] and 'lng' in post['location']:
-                    lat = post['location']['lat']
-                    lng = post['location']['lng']
-                    locations[str(lat) + ', ' + str(lng)] = post.get('taken_at')
-
-        address = {}
-        for k, v in locations.items():
-            details = self.geolocator.reverse(k)
-            unix_timestamp = datetime.datetime.fromtimestamp(v)
-            address[details.address] = unix_timestamp.strftime('%Y-%m-%d %H:%M:%S')
-
-        sort_addresses = sorted(address.items(), key=lambda p: p[1], reverse=True)
-
-        if len(sort_addresses) > 0:
-            t = PrettyTable()
-
-            t.field_names = ['Post', 'Address', 'time']
-            t.align["Post"] = "l"
-            t.align["Address"] = "l"
-            t.align["Time"] = "l"
-            pc.printout("\nWoohoo! We found " + str(len(sort_addresses)) + " addresses\n", pc.GREEN)
-
-            i = 1
-
-            addrs_list = []
-
-            for address, time in sort_addresses:
-                t.add_row([str(i), address, time])
-
-                if self.jsonDump:
-                    addr = {
-                        'address': address,
-                        'time': time
-                    }
-                    addrs_list.append(addr)
-
-                i = i + 1
-
-            with open(self.output_dir + "/" + self.target + "_addrs.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['Post', 'Address', 'time']
-                writer.writerow(data)
-                
-                for address, time in sort_addresses:
-                    writer.writerow([str(i), address, time])
-            
-
-            print(t)
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_captions(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for target captions...\n")
-
-        captions = []
-
-        data = self.__get_feed__()
-        counter = 0
-
-        try:
-            for item in data:
-                if "caption" in item:
-                    if item["caption"] is not None:
-                        text = item["caption"]["text"]
-                        captions.append(text)
-                        counter = counter + 1
-                        sys.stdout.write("\rFound %i" % counter)
-                        sys.stdout.flush()
-
-        except AttributeError:
-            pass
-
-        except KeyError:
-            pass
-
-        json_data = {}
-
-        if counter > 0:
-            pc.printout("\nWoohoo! We found " + str(counter) + " captions\n", pc.GREEN)
-
-
-            for s in captions:
-                print(s + "\n")
-
-            with open(self.output_dir + "/" + self.target + "_captions.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['caption']
-                writer.writerow(data)
-                
-                for s in captions:
-                    writer.writerow([s])
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-        return
-
-    def get_total_comments(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for target total comments...\n")
-
-        comments_counter = 0
-        posts = 0
-
-        data = self.__get_feed__()
-
-        for post in data:
-            comments_counter += post['comment_count']
-            posts += 1
-
-        file_name = self.output_dir + "/" + self.target + "_comments.txt"
-        file = open(file_name, "w")
-        file.write(str(comments_counter) + " comments in " + str(posts) + " posts\n")
-        file.close()
-
-
-        pc.printout(str(comments_counter), pc.MAGENTA)
-        pc.printout(" comments in " + str(posts) + " posts\n")
-
-    def get_comment_data(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Retrieving all comments, this may take a moment...\n")
-        data = self.__get_feed__()
-        
-        t = PrettyTable(['POST ID', 'ID', 'Username', 'Comment'])
-        t.align["POST ID"] = "l"
-        t.align["ID"] = "l"
-        t.align["Username"] = "l"
-        t.align["Comment"] = "l"
-
-        for post in data:
-            post_id = post.get('id')
-            comments = self.api.media_n_comments(post_id)
-            for comment in comments:
-                t.add_row([post_id, comment.get('user_id'), comment.get('user').get('username'), comment.get('text')])
-        
-        print(t)
-        with open(self.output_dir + "/" + self.target + "_comment_data.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['POST ID', 'ID', 'Username', 'Comment']
-                writer.writerow(data)
-                
-                for comment in comments:
-                    writer.writerow([post_id, comment.get('user_id'), comment.get('user').get('username'), comment.get('text')])
-
-    def get_followers(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for target followers...\n")
-
-        _followers = []
-        followers = []
-
-
-        rank_token = AppClient.generate_uuid()
-        data = self.api.user_followers(str(self.target_id), rank_token=rank_token)
-
-        _followers.extend(data.get('users', []))
-
-        next_max_id = data.get('next_max_id')
-        while next_max_id:
-            sys.stdout.write("\rCatched %i followers" % len(_followers))
-            sys.stdout.flush()
-            results = self.api.user_followers(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
-            _followers.extend(results.get('users', []))
-            next_max_id = results.get('next_max_id')
-
-        print("\n")
-            
-        for user in _followers:
-            u = {
-                'id': user['pk'],
-                'username': user['username'],
-                'full_name': user['full_name']
-            }
-            followers.append(u)
-
-        t = PrettyTable(['ID', 'Username', 'Full Name'])
-        t.align["ID"] = "l"
-        t.align["Username"] = "l"
-        t.align["Full Name"] = "l"
-
-        for node in followers:
-            t.add_row([str(node['id']), node['username'], node['full_name']])
-
-
-        with open(self.output_dir + "/" + self.target + "_followers.csv", 'w') as file:
-            writer = csv.writer(file)
-            data = ["ID", "Username", "Full Name"]
-            writer.writerow(data)
-            
-            for node in followers:
-                writer.writerow([str(node['id']), node['username'], node['full_name']])
-
-        print(t)
-
-    def get_followings(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for target followings...\n")
-
-        _followings = []
-        followings = []
-
-        rank_token = AppClient.generate_uuid()
-        data = self.api.user_following(str(self.target_id), rank_token=rank_token)
-
-        _followings.extend(data.get('users', []))
-
-        next_max_id = data.get('next_max_id')
-        while next_max_id:
-            sys.stdout.write("\rCatched %i followings" % len(_followings))
-            sys.stdout.flush()
-            results = self.api.user_following(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
-            _followings.extend(results.get('users', []))
-            next_max_id = results.get('next_max_id')
-
-        print("\n")
-
-        for user in _followings:
-            u = {
-                'id': user['pk'],
-                'username': user['username'],
-                'full_name': user['full_name']
-            }
-            followings.append(u)
-
-        t = PrettyTable(['ID', 'Username', 'Full Name'])
-        t.align["ID"] = "l"
-        t.align["Username"] = "l"
-        t.align["Full Name"] = "l"
-
-        for node in followings:
-            t.add_row([str(node['id']), node['username'], node['full_name']])
-
-        with open(self.output_dir + "/" + self.target + "_followings.csv", 'w') as file:
-            writer = csv.writer(file)
-            data = ["ID", "Username", "Full Name"]
-            writer.writerow(data)
-            
-            for node in followings:
-                writer.writerow([str(node['id']), node['username'], node['full_name']])
-
-        print(t)
-
-    def get_hashtags(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for target hashtags...\n")
-
-        hashtags = []
-        counter = 1
-        texts = []
-
-        data = self.api.user_feed(str(self.target_id))
-        texts.extend(data.get('items', []))
-
-        next_max_id = data.get('next_max_id')
-        while next_max_id:
-            results = self.api.user_feed(str(self.target_id), max_id=next_max_id)
-            texts.extend(results.get('items', []))
-            next_max_id = results.get('next_max_id')
-
-        for post in texts:
-            if post['caption'] is not None:
-                caption = post['caption']['text']
-                for s in caption.split():
-                    if s.startswith('#'):
-                        hashtags.append(s.encode('UTF-8'))
-                        counter += 1
-
-        if len(hashtags) > 0:
-            hashtag_counter = {}
-
-            for i in hashtags:
-                if i in hashtag_counter:
-                    hashtag_counter[i] += 1
-                else:
-                    hashtag_counter[i] = 1
-
-            ssort = sorted(hashtag_counter.items(), key=lambda value: value[1], reverse=True)
-
-
-            for k, v in ssort:
-                hashtag = str(k.decode('utf-8'))
-                print(str(v) + ". " + hashtag)
-
-            with open(self.output_dir + "/" + self.target + "_hashtag.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ["count", "hashtag"]
-                writer.writerow(data)
-                
-                for k, v in ssort:
-                    hashtag = str(k.decode('utf-8'))
-                    writer.writerow([str(v), hashtag])
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_user_info(self):
-        try:
-            endpoint = 'users/{user_id!s}/full_detail_info/'.format(**{'user_id': self.target_id})
-            content = self.api._call_api(endpoint)
-           
-            data = content['user_detail']['user']
-
-            pc.printout("[ID] ", pc.GREEN)
-            pc.printout(str(data['pk']) + '\n')
-            pc.printout("[FULL NAME] ", pc.RED)
-            pc.printout(str(data['full_name']) + '\n')
-            pc.printout("[BIOGRAPHY] ", pc.CYAN)
-            pc.printout(str(data['biography']) + '\n')
-            pc.printout("[FOLLOWED] ", pc.BLUE)
-            pc.printout(str(data['follower_count']) + '\n')
-            pc.printout("[FOLLOW] ", pc.GREEN)
-            pc.printout(str(data['following_count']) + '\n')
-            pc.printout("[BUSINESS ACCOUNT] ", pc.RED)
-            pc.printout(str(data['is_business']) + '\n')
-            if data['is_business']:
-                if not data['can_hide_category']:
-                    pc.printout("[BUSINESS CATEGORY] ")
-                    pc.printout(str(data['category']) + '\n')
-            pc.printout("[VERIFIED ACCOUNT] ", pc.CYAN)
-            pc.printout(str(data['is_verified']) + '\n')
-            if 'public_email' in data and data['public_email']:
-                pc.printout("[EMAIL] ", pc.BLUE)
-                pc.printout(str(data['public_email']) + '\n')
-            pc.printout("[HD PROFILE PIC] ", pc.GREEN)
-            pc.printout(str(data['hd_profile_pic_url_info']['url']) + '\n')
-            if 'fb_page_call_to_action_id' in data and data['fb_page_call_to_action_id']: 
-                pc.printout("[FB PAGE] ", pc.RED)
-                pc.printout(str(data['connected_fb_page']) + '\n')
-            if 'whatsapp_number' in data and data['whatsapp_number']:
-                pc.printout("[WHATSAPP NUMBER] ", pc.GREEN)
-                pc.printout(str(data['whatsapp_number']) + '\n')
-            if 'city_name' in data and data['city_name']:
-                pc.printout("[CITY] ", pc.YELLOW)
-                pc.printout(str(data['city_name']) + '\n')
-            if 'address_street' in data and data['address_street']:
-                pc.printout("[ADDRESS STREET] ", pc.RED)
-                pc.printout(str(data['address_street']) + '\n')
-            if 'contact_phone_number' in data and data['contact_phone_number']:
-                pc.printout("[CONTACT PHONE NUMBER] ", pc.CYAN)
-                pc.printout(str(data['contact_phone_number']) + '\n')
-
-            if self.jsonDump:
-                user = {
-                    'id': data['pk'],
-                    'full_name': data['full_name'],
-                    'biography': data['biography'],
-                    'edge_followed_by': data['follower_count'],
-                    'edge_follow': data['following_count'],
-                    'is_business_account': data['is_business'],
-                    'is_verified': data['is_verified'],
-                    'profile_pic_url_hd': data['hd_profile_pic_url_info']['url']
-                }
-                if 'public_email' in data and data['public_email']:
-                    user['email'] = data['public_email']
-                if 'fb_page_call_to_action_id' in data and data['fb_page_call_to_action_id']: 
-                    user['connected_fb_page'] = data['fb_page_call_to_action_id']
-                if 'whatsapp_number' in data and data['whatsapp_number']:
-                    user['whatsapp_number'] = data['whatsapp_number']
-                if 'city_name' in data and data['city_name']:
-                    user['city_name'] = data['city_name']
-                if 'address_street' in data and data['address_street']:
-                    user['address_street'] = data['address_street']
-                if 'contact_phone_number' in data and data['contact_phone_number']:
-                    user['contact_phone_number'] = data['contact_phone_number']
-
-                json_file_name = self.output_dir + "/" + self.target + "_info.json"
-                with open(json_file_name, 'w') as f:
-                    json.dump(user, f)
-
-        except ClientError as e:
-            print(e)
-            pc.printout("Oops... " + str(self.target) + " non exist, please enter a valid username.", pc.RED)
-            pc.printout("\n")
-            exit(2)
-
-    def get_total_likes(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for target total likes...\n")
-
-        like_counter = 0
-        posts = 0
-
-        data = self.__get_feed__()
-
-        for post in data:
-            like_counter += post['like_count']
-            posts += 1
-
-        file_name = self.output_dir + "/" + self.target + "_likes.txt"
-        file = open(file_name, "w")
-        file.write(str(like_counter) + " likes in " + str(like_counter) + " posts\n")
-        file.close()
-
-        pc.printout(str(like_counter), pc.MAGENTA)
-        pc.printout(" likes in " + str(posts) + " posts\n")
-
-    def get_media_type(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for target captions...\n")
-
-        counter = 0
-        photo_counter = 0
-        video_counter = 0
-
-        data = self.__get_feed__()
-
-        for post in data:
-            if "media_type" in post:
-                if post["media_type"] == 1:
-                    photo_counter = photo_counter + 1
-                elif post["media_type"] == 2:
-                    video_counter = video_counter + 1
-                counter = counter + 1
-                sys.stdout.write("\rChecked %i" % counter)
-                sys.stdout.flush()
-
-        sys.stdout.write(" posts")
-        sys.stdout.flush()
-
-        if counter > 0:
-
-            file_name = self.output_dir + "/" + self.target + "_mediatype.txt"
-            file = open(file_name, "w")
-            file.write(str(photo_counter) + " photos and " + str(video_counter) + " video posted by target\n")
-            file.close()
-
-            pc.printout("\nWoohoo! We found " + str(photo_counter) + " photos and " + str(video_counter) +
-                        " video posted by target\n", pc.GREEN)
-
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_people_who_commented(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for users who commented...\n")
-
-        data = self.__get_feed__()
-        users = []
-
-        for post in data:
-            comments = self.__get_comments__(post['id'])
-            for comment in comments:
-                if not any(u['id'] == comment['user']['pk'] for u in users):
-                    user = {
-                        'id': comment['user']['pk'],
-                        'username': comment['user']['username'],
-                        'full_name': comment['user']['full_name'],
-                        'counter': 1
-                    }
-                    users.append(user)
-                else:
-                    for user in users:
-                        if user['id'] == comment['user']['pk']:
-                            user['counter'] += 1
-                            break
-
-        if len(users) > 0:
-            ssort = sorted(users, key=lambda value: value['counter'], reverse=True)
-            t = PrettyTable()
-
-            t.field_names = ['Comments', 'ID', 'Username', 'Full Name']
-            t.align["Comments"] = "l"
-            t.align["ID"] = "l"
-            t.align["Username"] = "l"
-            t.align["Full Name"] = "l"
-
-            for u in ssort:
-                t.add_row([str(u['counter']), u['id'], u['username'], u['full_name']])
-
-            print(t)
-            with open(self.output_dir + "/" + self.target + "_users_who_commented.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['Comments', 'ID', 'Username', 'Full Name']
-                writer.writerow(data)
-                
-                for u in ssort:
-                    writer.writerow([str(u['counter']), u['id'], u['username'], u['full_name']])
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_people_who_tagged(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for users who tagged target...\n")
-
-        posts = []
-
-        result = self.api.usertag_feed(self.target_id)
-        posts.extend(result.get('items', []))
-
-        next_max_id = result.get('next_max_id')
-        while next_max_id:
-            results = self.api.user_feed(str(self.target_id), max_id=next_max_id)
-            posts.extend(results.get('items', []))
-            next_max_id = results.get('next_max_id')
-
-        if len(posts) > 0:
-            pc.printout("\nWoohoo! We found " + str(len(posts)) + " photos\n", pc.GREEN)
-
-            users = []
-
-            for post in posts:
-                if not any(u['id'] == post['user']['pk'] for u in users):
-                    user = {
-                        'id': post['user']['pk'],
-                        'username': post['user']['username'],
-                        'full_name': post['user']['full_name'],
-                        'counter': 1
-                    }
-                    users.append(user)
-                else:
-                    for user in users:
-                        if user['id'] == post['user']['pk']:
-                            user['counter'] += 1
-                            break
-
-            ssort = sorted(users, key=lambda value: value['counter'], reverse=True)
-
-            json_data = {}
-
-            t = PrettyTable()
-
-            t.field_names = ['Photos', 'ID', 'Username', 'Full Name']
-            t.align["Photos"] = "l"
-            t.align["ID"] = "l"
-            t.align["Username"] = "l"
-            t.align["Full Name"] = "l"
-
-            for u in ssort:
-                t.add_row([str(u['counter']), u['id'], u['username'], u['full_name']])
-
-            print(t)
-            with open(self.output_dir + "/" + self.target + "_users_who_tagged.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['Photos', 'ID', 'Username', 'Full Name']
-                writer.writerow(data)
-                
-                for u in ssort:
-                    writer.writerow([str(u['counter']), u['id'], u['username'], u['full_name']])
-            
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_photo_description(self):
-        if self.check_private_profile():
-            return
-
-        content = requests.get("https://www.instagram.com/" + str(self.target) + "/?__a=1")
-        data = content.json()
-
-        dd = data['graphql']['user']['edge_owner_to_timeline_media']['edges']
-
-        if len(dd) > 0:
-            pc.printout("\nWoohoo! We found " + str(len(dd)) + " descriptions\n", pc.GREEN)
-
-            count = 1
-
-            t = PrettyTable(['Photo', 'Description'])
-            t.align["Photo"] = "l"
-            t.align["Description"] = "l"
-
-            json_data = {}
-            descriptions_list = []
-
-            for i in dd:
-                node = i.get('node')
-                descr = node.get('accessibility_caption')
-                t.add_row([str(count), descr])
-
-                count += 1
-            with open(self.output_dir + "/" + self.target + "_photodes.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['Photo', 'Description']
-                writer.writerow(data)
-                
-                for i in dd:
-                    node = i.get('node')
-                    descr = node.get('accessibility_caption')
-                    writer.writerow([str(count), descr])
-                    count += 1
-            
-
-            print(t)
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_user_photo(self):
-        if self.check_private_profile():
-            return
-
-        limit = -1
-        if self.cli_mode:
-            user_input = ""
-        else:
-            pc.printout("How many photos you want to download (default all): ", pc.YELLOW)
-            user_input = input()
-          
-        try:
-            if user_input == "":
-                pc.printout("Downloading all photos available...\n")
-            else:
-                limit = int(user_input)
-                pc.printout("Downloading " + user_input + " photos...\n")
-
-        except ValueError:
-            pc.printout("Wrong value entered\n", pc.RED)
-            return
-
-        data = []
-        counter = 0
-
-        result = self.api.user_feed(str(self.target_id))
-        data.extend(result.get('items', []))
-
-        next_max_id = result.get('next_max_id')
-        while next_max_id:
-            results = self.api.user_feed(str(self.target_id), max_id=next_max_id)
-            data.extend(results.get('items', []))
-            next_max_id = results.get('next_max_id')
-
-        try:
-            for item in data:
-                if counter == limit:
-                    break
-                if "image_versions2" in item:
-                    counter = counter + 1
-                    url = item["image_versions2"]["candidates"][0]["url"]
-                    photo_id = item["id"]
-                    end = self.output_dir + "/" + self.target + "_" + photo_id + ".jpg"
-                    urllib.request.urlretrieve(url, end)
-                    sys.stdout.write("\rDownloaded %i" % counter)
-                    sys.stdout.flush()
-                else:
-                    carousel = item["carousel_media"]
-                    for i in carousel:
-                        if counter == limit:
-                            break
-                        counter = counter + 1
-                        url = i["image_versions2"]["candidates"][0]["url"]
-                        photo_id = i["id"]
-                        end = self.output_dir + "/" + self.target + "_" + photo_id + ".jpg"
-                        urllib.request.urlretrieve(url, end)
-                        sys.stdout.write("\rDownloaded %i" % counter)
-                        sys.stdout.flush()
-
-        except AttributeError:
-            pass
-
-        except KeyError:
-            pass
-
-        sys.stdout.write(" photos")
-        sys.stdout.flush()
-
-        pc.printout("\nWoohoo! We downloaded " + str(counter) + " photos (saved in " + self.output_dir + " folder) \n", pc.GREEN)
-
-    def get_user_propic(self):
-
-        try:
-            endpoint = 'users/{user_id!s}/full_detail_info/'.format(**{'user_id': self.target_id})
-            content = self.api._call_api(endpoint)
-
-            data = content['user_detail']['user']
-
-            if "hd_profile_pic_url_info" in data:
-                URL = data["hd_profile_pic_url_info"]['url']
-            else:
-                #get better quality photo
-                items = len(data['hd_profile_pic_versions'])
-                URL = data["hd_profile_pic_versions"][items-1]['url']
-
-            if URL != "":
-                end = self.output_dir + "/" + self.target + "_propic.jpg"
-                urllib.request.urlretrieve(URL, end)
-                pc.printout("Target propic saved in output folder\n", pc.GREEN)
-
-            else:
-                pc.printout("Sorry! No results found :-(\n", pc.RED)
-        
-        except ClientError as e:
-            error = json.loads(e.error_response)
-            print(error['message'])
-            print(error['error_title'])
-            exit(2)
-
-    def get_user_stories(self):
-        if self.check_private_profile():
-            return
-
-        pc.printout("Searching for target stories...\n")
-
-        data = self.api.user_reel_media(str(self.target_id))
-
-        counter = 0
-
-        if data['items'] is not None:  # no stories avaibile
-            counter = data['media_count']
-            for i in data['items']:
-                story_id = i["id"]
-                if i["media_type"] == 1:  # it's a photo
-                    url = i['image_versions2']['candidates'][0]['url']
-                    end = self.output_dir + "/" + self.target + "_" + story_id + ".jpg"
-                    urllib.request.urlretrieve(url, end)
-
-                elif i["media_type"] == 2:  # it's a gif or video
-                    url = i['video_versions'][0]['url']
-                    end = self.output_dir + "/" + self.target + "_" + story_id + ".mp4"
-                    urllib.request.urlretrieve(url, end)
-
-        if counter > 0:
-            pc.printout(str(counter) + " target stories saved in output folder\n", pc.GREEN)
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_people_tagged_by_user(self):
-        pc.printout("Searching for users tagged by target...\n")
-
-        ids = []
-        username = []
-        full_name = []
-        post = []
-        counter = 1
-
-        data = self.__get_feed__()
-
-        try:
-            for i in data:
-                if "usertags" in i:
-                    c = i.get('usertags').get('in')
-                    for cc in c:
-                        if cc.get('user').get('pk') not in ids:
-                            ids.append(cc.get('user').get('pk'))
-                            username.append(cc.get('user').get('username'))
-                            full_name.append(cc.get('user').get('full_name'))
-                            post.append(1)
-                        else:
-                            index = ids.index(cc.get('user').get('pk'))
-                            post[index] += 1
-                        counter = counter + 1
-        except AttributeError as ae:
-            pc.printout("\nERROR: an error occurred: ", pc.RED)
-            print(ae)
-            print("")
-            pass
-
-        if len(ids) > 0:
-            t = PrettyTable()
-
-            t.field_names = ['Posts', 'Full Name', 'Username', 'ID']
-            t.align["Posts"] = "l"
-            t.align["Full Name"] = "l"
-            t.align["Username"] = "l"
-            t.align["ID"] = "l"
-
-            pc.printout("\nWoohoo! We found " + str(len(ids)) + " (" + str(counter) + ") users\n", pc.GREEN)
-
-            for i in range(len(ids)):
-                t.add_row([post[i], full_name[i], username[i], str(ids[i])])
-
-            with open(self.output_dir + "/" + self.target + "_tagged.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['Posts', 'Full Name', 'Username', 'ID']
-                writer.writerow(data)
-                
-                for i in range(len(ids)):
-                    writer.writerow([post[i], full_name[i], username[i], str(ids[i])])
-
-            print(t)
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
 
     def get_user(self, username):
         try:
@@ -937,7 +110,6 @@ class Osintgram:
                 print("Please follow this link to complete the challenge: " + error['challenge']['url'])    
             sys.exit(2)
         
-
     def set_write_file(self, flag):
         if flag:
             pc.printout("Write to file: ")
@@ -1018,7 +190,6 @@ class Osintgram:
         cache_settings = api.settings
         with open(new_settings_file, 'w') as outfile:
             json.dump(cache_settings, outfile, default=self.to_json)
-            # print('SAVED: {0!s}'.format(new_settings_file))
 
     def check_following(self):
         if str(self.target_id) == self.api.authenticated_user_id:
@@ -1036,419 +207,7 @@ class Osintgram:
 
             return True
         return False
-
-    def get_fwersemail(self):
-        if self.check_private_profile():
-            return
-
-        followers = []
-        
-        try:
-
-            pc.printout("Searching for emails of target followers... this can take a few minutes\n")
-
-            rank_token = AppClient.generate_uuid()
-            data = self.api.user_followers(str(self.target_id), rank_token=rank_token)
-
-            for user in data.get('users', []):
-                u = {
-                    'id': user['pk'],
-                    'username': user['username'],
-                    'full_name': user['full_name']
-                }
-                followers.append(u)
-
-            next_max_id = data.get('next_max_id')
-            while next_max_id:
-                sys.stdout.write("\rCatched %i followers email" % len(followers))
-                sys.stdout.flush()
-                results = self.api.user_followers(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
-                
-                for user in results.get('users', []):
-                    u = {
-                        'id': user['pk'],
-                        'username': user['username'],
-                        'full_name': user['full_name']
-                    }
-                    followers.append(u)
-
-                next_max_id = results.get('next_max_id')
-            
-            print("\n")
-
-            results = []
-            
-            pc.printout("Do you want to get all emails? y/n: ", pc.YELLOW)
-            value = input()
-            
-            if value == str("y") or value == str("yes") or value == str("Yes") or value == str("YES"):
-                value = len(followers)
-            elif value == str(""):
-                print("\n")
-                return
-            elif value == str("n") or value == str("no") or value == str("No") or value == str("NO"):
-                while True:
-                    try:
-                        pc.printout("How many emails do you want to get? ", pc.YELLOW)
-                        new_value = int(input())
-                        value = new_value - 1
-                        break
-                    except ValueError:
-                        pc.printout("Error! Please enter a valid integer!", pc.RED)
-                        print("\n")
-                        return
-            else:
-                pc.printout("Error! Please enter y/n :-)", pc.RED)
-                print("\n")
-                return
-
-            for follow in followers:
-                user = self.api.user_info(str(follow['id']))
-                if 'public_email' in user['user'] and user['user']['public_email']:
-                    follow['email'] = user['user']['public_email']
-                    if len(results) > value:
-                        break
-                    results.append(follow)
-
-        except ClientThrottledError  as e:
-            pc.printout("\nError: Instagram blocked the requests. Please wait a few minutes before you try again.", pc.RED)
-            pc.printout("\n")
-
-        if len(results) > 0:
-
-            t = PrettyTable(['ID', 'Username', 'Full Name', 'Email'])
-            t.align["ID"] = "l"
-            t.align["Username"] = "l"
-            t.align["Full Name"] = "l"
-            t.align["Email"] = "l"
-
-            json_data = {}
-
-            for node in results:
-                t.add_row([str(node['id']), node['username'], node['full_name'], node['email']])
-
-            with open(self.output_dir + "/" + self.target + "_fwersemail.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['ID', 'Username', 'Full Name', 'Email']
-                writer.writerow(data)
-                
-                for node in results:
-                    writer.writerow([str(node['id']), node['username'], node['full_name'], node['email']])
-            
-
-            print(t)
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_fwingsemail(self):
-        if self.check_private_profile():
-            return
-
-        followings = []
-
-        try:
-
-            pc.printout("Searching for emails of users followed by target... this can take a few minutes\n")
-
-            rank_token = AppClient.generate_uuid()
-            data = self.api.user_following(str(self.target_id), rank_token=rank_token)
-
-            for user in data.get('users', []):
-                u = {
-                    'id': user['pk'],
-                    'username': user['username'],
-                    'full_name': user['full_name']
-                }
-                followings.append(u)
-
-            next_max_id = data.get('next_max_id')
-            
-            while next_max_id:
-                results = self.api.user_following(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
-
-                for user in results.get('users', []):
-                    u = {
-                        'id': user['pk'],
-                        'username': user['username'],
-                        'full_name': user['full_name']
-                    }
-                    followings.append(u)
-
-                next_max_id = results.get('next_max_id')
-        
-            results = []
-            
-            pc.printout("Do you want to get all emails? y/n: ", pc.YELLOW)
-            value = input()
-            
-            if value == str("y") or value == str("yes") or value == str("Yes") or value == str("YES"):
-                value = len(followings)
-            elif value == str(""):
-                print("\n")
-                return
-            elif value == str("n") or value == str("no") or value == str("No") or value == str("NO"):
-                while True:
-                    try:
-                        pc.printout("How many emails do you want to get? ", pc.YELLOW)
-                        new_value = int(input())
-                        value = new_value - 1
-                        break
-                    except ValueError:
-                        pc.printout("Error! Please enter a valid integer!", pc.RED)
-                        print("\n")
-                        return
-            else:
-                pc.printout("Error! Please enter y/n :-)", pc.RED)
-                print("\n")
-                return
-
-            for follow in followings:
-                sys.stdout.write("\rCatched %i followings email" % len(results))
-                sys.stdout.flush()
-                user = self.api.user_info(str(follow['id']))
-                if 'public_email' in user['user'] and user['user']['public_email']:
-                    follow['email'] = user['user']['public_email']
-                    if len(results) > value:
-                        break
-                    results.append(follow)
-        
-        except ClientThrottledError as e:
-            pc.printout("\nError: Instagram blocked the requests. Please wait a few minutes before you try again.", pc.RED)
-            pc.printout("\n")
-        
-        print("\n")
-
-        if len(results) > 0:
-            t = PrettyTable(['ID', 'Username', 'Full Name', 'Email'])
-            t.align["ID"] = "l"
-            t.align["Username"] = "l"
-            t.align["Full Name"] = "l"
-            t.align["Email"] = "l"
-
-            json_data = {}
-
-            for node in results:
-                t.add_row([str(node['id']), node['username'], node['full_name'], node['email']])
-
-            with open(self.output_dir + "/" + self.target + "_fwingsemail.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['ID', 'Username', 'Full Name', 'Email']
-                writer.writerow(data)
-                
-                for node in results:
-                    writer.writerow([str(node['id']), node['username'], node['full_name'], node['email']])
-            
-
-            print(t)
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_fwingsnumber(self):
-        if self.check_private_profile():
-            return
-       
-        try:
-
-            pc.printout("Searching for phone numbers of users followed by target... this can take a few minutes\n")
-
-            followings = []
-
-            rank_token = AppClient.generate_uuid()
-            data = self.api.user_following(str(self.target_id), rank_token=rank_token)
-
-            for user in data.get('users', []):
-                u = {
-                    'id': user['pk'],
-                    'username': user['username'],
-                    'full_name': user['full_name']
-                }
-                followings.append(u)
-
-            next_max_id = data.get('next_max_id')
-            
-            while next_max_id:
-                results = self.api.user_following(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
-
-                for user in results.get('users', []):
-                    u = {
-                        'id': user['pk'],
-                        'username': user['username'],
-                        'full_name': user['full_name']
-                    }
-                    followings.append(u)
-
-                next_max_id = results.get('next_max_id')
-       
-            results = []
-        
-            pc.printout("Do you want to get all phone numbers? y/n: ", pc.YELLOW)
-            value = input()
-            
-            if value == str("y") or value == str("yes") or value == str("Yes") or value == str("YES"):
-                value = len(followings)
-            elif value == str(""):
-                print("\n")
-                return
-            elif value == str("n") or value == str("no") or value == str("No") or value == str("NO"):
-                while True:
-                    try:
-                        pc.printout("How many phone numbers do you want to get? ", pc.YELLOW)
-                        new_value = int(input())
-                        value = new_value - 1
-                        break
-                    except ValueError:
-                        pc.printout("Error! Please enter a valid integer!", pc.RED)
-                        print("\n")
-                        return
-            else:
-                pc.printout("Error! Please enter y/n :-)", pc.RED)
-                print("\n")
-                return
-
-            for follow in followings:
-                sys.stdout.write("\rCatched %i followings phone numbers" % len(results))
-                sys.stdout.flush()
-                user = self.api.user_info(str(follow['id']))
-                if 'contact_phone_number' in user['user'] and user['user']['contact_phone_number']:
-                    follow['contact_phone_number'] = user['user']['contact_phone_number']
-                    if len(results) > value:
-                        break
-                    results.append(follow)
-
-        except ClientThrottledError as e:
-            pc.printout("\nError: Instagram blocked the requests. Please wait a few minutes before you try again.", pc.RED)
-            pc.printout("\n")
-        
-        print("\n")
-
-        if len(results) > 0:
-            t = PrettyTable(['ID', 'Username', 'Full Name', 'Phone'])
-            t.align["ID"] = "l"
-            t.align["Username"] = "l"
-            t.align["Full Name"] = "l"
-            t.align["Phone number"] = "l"
-
-            json_data = {}
-
-            for node in results:
-                t.add_row([str(node['id']), node['username'], node['full_name'], node['contact_phone_number']])
-
-            with open(self.output_dir + "/" + self.target + "_fwingsnumber.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['ID', 'Username', 'Full Name', 'Phone']
-                writer.writerow(data)
-                
-                for node in results:
-                    writer.writerow([str(node['id']), node['username'], node['full_name'], node['contact_phone_number']])
-            
-
-            print(t)
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
-    def get_fwersnumber(self):
-        if self.check_private_profile():
-            return
-
-        followings = []
-
-        try:
-
-            pc.printout("Searching for phone numbers of users followers... this can take a few minutes\n")
-
-
-            rank_token = AppClient.generate_uuid()
-            data = self.api.user_following(str(self.target_id), rank_token=rank_token)
-
-            for user in data.get('users', []):
-                u = {
-                    'id': user['pk'],
-                    'username': user['username'],
-                    'full_name': user['full_name']
-                }
-                followings.append(u)
-
-            next_max_id = data.get('next_max_id')
-            
-            while next_max_id:
-                results = self.api.user_following(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
-
-                for user in results.get('users', []):
-                    u = {
-                        'id': user['pk'],
-                        'username': user['username'],
-                        'full_name': user['full_name']
-                    }
-                    followings.append(u)
-
-                next_max_id = results.get('next_max_id')
-        
-            results = []
-            
-            pc.printout("Do you want to get all phone numbers? y/n: ", pc.YELLOW)
-            value = input()
-            
-            if value == str("y") or value == str("yes") or value == str("Yes") or value == str("YES"):
-                value = len(followings)
-            elif value == str(""):
-                print("\n")
-                return
-            elif value == str("n") or value == str("no") or value == str("No") or value == str("NO"):
-                while True:
-                    try:
-                        pc.printout("How many phone numbers do you want to get? ", pc.YELLOW)
-                        new_value = int(input())
-                        value = new_value - 1
-                        break
-                    except ValueError:
-                        pc.printout("Error! Please enter a valid integer!", pc.RED)
-                        print("\n")
-                        return
-            else:
-                pc.printout("Error! Please enter y/n :-)", pc.RED)
-                print("\n")
-                return
-
-            for follow in followings:
-                sys.stdout.write("\rCatched %i followers phone numbers" % len(results))
-                sys.stdout.flush()
-                user = self.api.user_info(str(follow['id']))
-                if 'contact_phone_number' in user['user'] and user['user']['contact_phone_number']:
-                    follow['contact_phone_number'] = user['user']['contact_phone_number']
-                    if len(results) > value:
-                        break
-                    results.append(follow)
-
-        except ClientThrottledError as e:
-            pc.printout("\nError: Instagram blocked the requests. Please wait a few minutes before you try again.", pc.RED)
-            pc.printout("\n")
-
-        print("\n")
-
-        if len(results) > 0:
-            t = PrettyTable(['ID', 'Username', 'Full Name', 'Phone'])
-            t.align["ID"] = "l"
-            t.align["Username"] = "l"
-            t.align["Full Name"] = "l"
-            t.align["Phone number"] = "l"
-
-            json_data = {}
-
-            for node in results:
-                t.add_row([str(node['id']), node['username'], node['full_name'], node['contact_phone_number']])
-            with open(self.output_dir + "/" + self.target + "_fwersnumber.csv", 'w') as file:
-                writer = csv.writer(file)
-                data = ['ID', 'Username', 'Full Name', 'Phone']
-                writer.writerow(data)
-                
-                for node in results:
-                    writer.writerow([str(node['id']), node['username'], node['full_name'], node['contact_phone_number']])
-            
-
-            print(t)
-        else:
-            pc.printout("Sorry! No results found :-(\n", pc.RED)
-
+  
     def get_comments(self):
         if self.check_private_profile():
             return
@@ -1518,3 +277,294 @@ class Osintgram:
             pc.printout("Settings.json don't exist.\n",pc.RED)
         finally:
             f.close()
+
+    def get_followings(self):
+        if self.check_private_profile():
+            return
+        csv_file = self.output_dir + "/" + self.target +  "/" + "_following.csv"
+        os.makedirs(os.path.dirname(csv_file), exist_ok=True)
+
+        try:
+            next_max_id = None
+            pc.printout("do you want to continue last scrape? y/n: ", pc.YELLOW)
+            value = input()
+            if value == "y":
+                pc.printout("Please input last MAX_ID to continue last scrape?", pc.YELLOW)
+                next_max_id = input()
+            pc.printout("Searching for target followers...\n")
+            rank_token = AppClient.generate_uuid()
+            if next_max_id is None:
+                data = self.api.user_following(str(self.target_id), rank_token=rank_token)
+                next_max_id = data.get('next_max_id')
+                total = 0
+                for user in data.get('users', []):
+                    total += 1
+                    with open(csv_file, 'a') as f:
+                        writer = csv.writer(f)
+                        writer.writerow([str(user['pk']), user['username'], user['full_name'],str(next_max_id)])
+
+                    sys.stdout.write("\rCatched %i data" % total)
+                    sys.stdout.flush()
+                
+            count = 0
+            while next_max_id:
+                data = self.api.user_following(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
+                for user in data.get('users', []):
+                    total += 1
+                    with open(csv_file, 'a') as f:
+                        writer = csv.writer(f)
+                        writer.writerow([str(user['pk']), user['username'], user['full_name'],str(next_max_id)])
+
+                    sys.stdout.write("\rCatched %i data" % total)
+                    sys.stdout.flush()
+                next_max_id = data.get('next_max_id')
+                if count == 100:
+                    settime = random.randint(10, 100)
+                    sys.stdout.flush()
+                    sys.stdout.write("sleep after seconds."+str(settime))
+                    time.sleep(settime)
+                    count = 0
+                count += 1
+
+            print("done")
+        except Exception as e:
+            print("\nError.")
+            print(str(e))
+            print("\n")
+
+    def get_followers(self):
+        if self.check_private_profile():
+            return
+        csv_file = self.output_dir + "/" + self.target +  "/" + "_follower.csv"
+        os.makedirs(os.path.dirname(csv_file), exist_ok=True)
+
+        try:
+            next_max_id = None
+            pc.printout("do you want to continue last scrape? y/n: ", pc.YELLOW)
+            value = input()
+            if value == "y":
+                pc.printout("Please input last MAX_ID to continue last scrape?", pc.YELLOW)
+                next_max_id = input()
+            pc.printout("Searching for target followers...\n")
+            rank_token = AppClient.generate_uuid()
+            total = 0
+            if next_max_id is None:
+                data = self.api.user_followers(str(self.target_id), rank_token=rank_token)
+                next_max_id = data.get('next_max_id')
+                for user in data.get('users', []):
+                    total += 1
+                    with open(csv_file, 'a') as f:
+                        writer = csv.writer(f)
+                        writer.writerow([str(user['pk']), user['username'], user['full_name'],str(next_max_id)])
+
+                    sys.stdout.write("\rCatched %i data" % total)
+                    sys.stdout.flush()
+            else:
+                data = self.api.user_followers(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
+                next_max_id = data.get('next_max_id')
+
+                
+            count = 0
+            while next_max_id:
+                data = self.api.user_followers(str(self.target_id), rank_token=rank_token, max_id=next_max_id)
+                for user in data.get('users', []):
+                    total += 1
+                    with open(csv_file, 'a') as f:
+                        writer = csv.writer(f)
+                        writer.writerow([str(user['pk']), user['username'], user['full_name'],str(next_max_id)])
+
+                    sys.stdout.write("\rCatched %i data" % total)
+                    sys.stdout.flush()
+                next_max_id = data.get('next_max_id')
+                if count >= 100:
+                    settime = random.randint(100, 300)
+                    sys.stdout.write("sleep after seconds."+str(settime))
+                    sys.stdout.flush()
+                    time.sleep(settime)
+                    count = 0
+                else:
+                    lottery = random.randint(1, 2)
+                    settime = random.randint(0, 10)
+                    sys.stdout.write("short sleep after seconds."+str(settime))
+                    sys.stdout.flush()
+                    time.sleep(settime)
+                    if lottery == 1:
+                        self.do_random_req()
+                count += 1
+
+            print("done")
+            text = "Success fetched all {} followers data.".format(self.target)
+            self.send_notif(chat_id=-660426638,text=text)
+        except Exception as e:
+            print("\nError.")
+            print(str(e))
+            print("\n")
+            text = "user : {} \nFailed please check the log. {} followers data. \nerror : {}".format(self.api.username,self.target,str(e))
+            self.send_notif(chat_id=-660426638,text=text)
+
+    def get_detail_followings(self):
+        try:
+            index = 0
+            pc.printout("do you want to continue last scrape? y/n: ", pc.YELLOW)
+            value = input()
+            if value == "y":
+                pc.printout("Please input last index to continue last scrape? ", pc.YELLOW)
+                index = input()
+
+            csv_file = self.output_dir + "/" + self.target + "/" + "_following.csv"
+            target_phone = self.output_dir + "/" + self.target + "/" + "_following_number.csv"
+            target_email = self.output_dir + "/" + self.target + "/" + "_following_email.csv"
+
+            os.makedirs(os.path.dirname(csv_file), exist_ok=True)
+            # get followers user info
+            count = 0
+            with open(csv_file) as csv_file:
+                csv_reader = csv.reader(csv_file, delimiter=',')
+                for _ in range(0,int(index)):
+                    next(csv_reader)
+                line = int(index)
+                for row in csv_reader:
+                    sys.stdout.write("line data checked "+str(line)+"\n")
+                    sys.stdout.flush()
+                    user = self.api.user_info(str(row[0]))
+                    if 'contact_phone_number' in user['user'] and user['user']['contact_phone_number']:
+                        with open(target_phone, 'a') as f:
+                            writer = csv.writer(f)
+                            writer.writerow([str(line),str(user['user']['pk']), user['user']['username'], user['user']['full_name'],user['user']['contact_phone_number'],'contact_phone_number'])
+                    if 'public_email' in user['user'] and user['user']['public_email']:
+                        with open(target_email, 'a') as f:
+                            writer = csv.writer(f)
+                            writer.writerow([str(line),str(user['user']['pk']), user['user']['username'], user['user']['full_name'],user['user']['public_email'],'email'])
+                    if count >= 100:
+                        settime = random.randint(10, 100)
+                        sys.stdout.write("sleep after seconds."+str(settime))
+                        sys.stdout.flush()
+                        time.sleep(settime)
+                        count = 0
+                    count += 1
+                    line += 1
+            
+        except Exception as e:
+            print("\nError.")
+            print(str(e))
+            print("\n")
+
+    def get_detail_followers(self):
+        if self.check_private_profile():
+            return
+        index = 0
+        pc.printout("do you want to continue last scrape? y/n: ", pc.YELLOW)
+        value = input()
+        if value == "y":
+            pc.printout("Please input last index to continue last scrape? ", pc.YELLOW)
+            index = input()
+
+        csv_file = self.output_dir + "/" + self.target + "/" + "_follower.csv"
+        target_phone = self.output_dir + "/" + self.target + "/" + "_follower_number.csv"
+        target_email = self.output_dir + "/" + self.target + "/" + "_follower_email.csv"
+
+        os.makedirs(os.path.dirname(csv_file), exist_ok=True)
+        # get followers user info
+        count = 0
+        with open(csv_file) as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
+            for _ in range(0,int(index)):
+                next(csv_reader)
+            line = int(index)
+            for row in csv_reader:
+                try:
+                    sys.stdout.write("\n"+"line data checked "+str(line)+"\n")
+                    sys.stdout.flush()
+                    
+                    user = self.api.user_info(str(row[0]))
+                    if 'contact_phone_number' in user['user'] and user['user']['contact_phone_number']:
+                        with open(target_phone, 'a') as f:
+                            writer = csv.writer(f)
+                            writer.writerow([str(line),str(user['user']['pk']), user['user']['username'], user['user']['full_name'],user['user']['contact_phone_number'],'contact_phone_number'])
+                    
+                    if 'public_email' in user['user'] and user['user']['public_email']:
+                        with open(target_email, 'a') as f:
+                            writer = csv.writer(f)
+                            writer.writerow([str(line),str(user['user']['pk']), user['user']['username'], user['user']['full_name'],user['user']['public_email'],'email'])
+
+                    if count >= 200:
+                        settime = random.randint(100, 300)
+                        sys.stdout.write("sleep after seconds."+str(settime))
+                        sys.stdout.flush()
+                        # time.sleep(settime)
+                        count = 0
+                    else:
+                        lottery = random.randint(1, 2)
+                        if lottery == 1:
+                            settime = random.randint(0, 10)
+                            sys.stdout.write("short sleep after seconds."+str(settime))
+                            sys.stdout.flush()
+                            # time.sleep(settime)
+                        # else:
+                        #     self.do_random_req()
+                    count += 1
+                    line += 1
+                except Exception as e:
+                    print("\nError.")
+                    print(str(e))
+                    settime = random.randint(10, 20)
+                    # text = """
+                    # User : {}
+                    # \nTarget : {}
+                    # \n\nFAILED TO GET DETAIL FOLLOWER DATA.
+                    # \nLast user checked : {}.
+                    # \nError : {}.
+                    # \n\nAutomatically try again in {} second
+                    # """.format(self.api.username,self.target,str(line),str(e),str(settime))
+                    # self.send_notif(chat_id=-660426638,text=text)
+                    # time.sleep(settime)
+
+
+        text = "Success fetched all {} followers phone number. \n".format(self.target)
+        self.send_notif(chat_id=-660426638,text=text)
+
+    def do_random_req(self):
+        if self.check_private_profile():
+            return
+        number = random.randint(1,10)
+        print("\n===== doing random request ======")
+        print(number)
+        print("===== doing random request ======\n")
+        try:
+            if number == 1:
+                result = self.api.user_feed(str(self.target_id))
+            elif number == 2:
+                endpoint = 'users/{user_id!s}/full_detail_info/'.format(**{'user_id': self.target_id})
+                result = self.api._call_api(endpoint)
+            elif number == 3:
+                result = self.api.search_users(names.get_first_name())
+            elif number == 4:
+                result = self.api.blocked_user_list()
+            elif number == 5:
+                result = self.api.tags_user_following(str(self.target_id))
+            elif number == 6:
+                result = self.api.tag_follow_suggestions()
+            else:
+                r = RandomWords()
+                rank_token = AppClient.generate_uuid()
+                result = self.api.tag_search(text=r.get_random_word(),rank_token=rank_token)
+            print(result)
+        except Exception as e:
+            return str(e)
+        return True
+
+    def send_notif(self, chat_id, text):
+        url = "https://api.telegram.org/bot5427338300:AAGAGvX_UxauRnPUTp-iqNCi7K6VjyfBIHA/sendMessage?chat_id={}&text={}".format(chat_id, text)
+        # with open("config/settings.json", 'w') as f:
+        #     f.write("{}")
+        # u = config.getUsername()
+        # p = config.getPassword()
+        # self.login(p=p,u=u)
+        # return url
+        payload={}
+        headers = {}
+
+        response = requests.request("POST", url, headers=headers, data=payload)
+
+        print(response.text)
+        return response.text

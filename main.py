@@ -21,101 +21,29 @@ def printlogo():
     pc.printout("\nVersion 1.1 - Developed by Giuseppe Criscione | Updated by Lesmana.\n\n", pc.BLUE)
     pc.printout("\n\n\n")
     pc.printout("Command List.\n", pc.BLUE)
-    pc.printout("addrs\t\t")
-    print("Get all registered addressed by target photos")
-    pc.printout("cache\t\t")
-    print("Clear cache of the tool")
-    pc.printout("captions\t")
-    print("Get target's photos captions")
-    pc.printout("commentdata\t")
-    print("Get a list of all the comments on the target's posts")
-    pc.printout("comments\t")
-    print("Get total comments of target's posts")
-    pc.printout("followers\t")
-    print("Get target followers")
-    pc.printout("followings\t")
-    print("Get users followed by target")
-    pc.printout("fwersemail\t")
-    print("Get email of target followers")
-    pc.printout("fwingsemail\t")
-    print("Get email of users followed by target")
-    pc.printout("fwersnumber\t")
-    print("Get phone number of target followers")
-    pc.printout("fwingsnumber\t")
-    print("Get phone number of users followed by target")    
-    pc.printout("hashtags\t")
-    print("Get hashtags used by target")
-    pc.printout("info\t\t")
-    print("Get target info")
-    pc.printout("likes\t\t")
-    print("Get total likes of target's posts")
-    pc.printout("mediatype\t")
-    print("Get target's posts type (photo or video)")
-    pc.printout("photodes\t")
-    print("Get description of target's photos")
-    pc.printout("photos\t\t")
-    print("Download target's photos in output folder")
-    pc.printout("propic\t\t")
-    print("Download target's profile picture")
-    pc.printout("stories\t\t")
-    print("Download target's stories")
-    pc.printout("tagged\t\t")
-    print("Get list of users tagged by target")
-    pc.printout("target\t\t")
-    print("Set new target")
-    pc.printout("wcommented\t")
-    print("Get a list of user who commented target's photos")
-    pc.printout("wtagged\t\t")
-    print("Get a list of user who tagged target")
+    pc.printout("1\t")
+    print("Get followers data")
+    pc.printout("2\t")
+    print("Get followings data")
+    pc.printout("3\t")
+    print("Get detail data of target followers")
+    pc.printout("4\t")
+    print("Get detail data target followings")
+    pc.printout("target\t")
+    print("Change target")
 
 
 def cmdlist():
-    pc.printout("addrs\t\t")
-    print("Get all registered addressed by target photos")
-    pc.printout("cache\t\t")
-    print("Clear cache of the tool")
-    pc.printout("captions\t")
-    print("Get target's photos captions")
-    pc.printout("commentdata\t")
-    print("Get a list of all the comments on the target's posts")
-    pc.printout("comments\t")
-    print("Get total comments of target's posts")
-    pc.printout("followers\t")
-    print("Get target followers")
-    pc.printout("followings\t")
-    print("Get users followed by target")
-    pc.printout("fwersemail\t")
-    print("Get email of target followers")
-    pc.printout("fwingsemail\t")
-    print("Get email of users followed by target")
-    pc.printout("fwersnumber\t")
-    print("Get phone number of target followers")
-    pc.printout("fwingsnumber\t")
-    print("Get phone number of users followed by target")    
-    pc.printout("hashtags\t")
-    print("Get hashtags used by target")
-    pc.printout("info\t\t")
-    print("Get target info")
-    pc.printout("likes\t\t")
-    print("Get total likes of target's posts")
-    pc.printout("mediatype\t")
-    print("Get target's posts type (photo or video)")
-    pc.printout("photodes\t")
-    print("Get description of target's photos")
-    pc.printout("photos\t\t")
-    print("Download target's photos in output folder")
-    pc.printout("propic\t\t")
-    print("Download target's profile picture")
-    pc.printout("stories\t\t")
-    print("Download target's stories")
-    pc.printout("tagged\t\t")
-    print("Get list of users tagged by target")
-    pc.printout("target\t\t")
-    print("Set new target")
-    pc.printout("wcommented\t")
-    print("Get a list of user who commented target's photos")
-    pc.printout("wtagged\t\t")
-    print("Get a list of user who tagged target")
+    pc.printout("1\t")
+    print("Get followers data")
+    pc.printout("2\t")
+    print("Get followings data")
+    pc.printout("3\t")
+    print("Get detail data of target followers")
+    pc.printout("4\t")
+    print("Get detail data target followings")
+    pc.printout("target\t")
+    print("Change target")
 
 
 def signal_handler(sig, frame):
@@ -165,29 +93,11 @@ commands = {
     'help':             cmdlist,
     'quit':             _quit,
     'exit':             _quit,
-    'addrs':            api.get_addrs,
-    'cache':            api.clear_cache,
-    'captions':         api.get_captions,
-    "commentdata":      api.get_comment_data,
-    'comments':         api.get_total_comments,
-    'followers':        api.get_followers,
-    'followings':       api.get_followings,
-    'fwersemail':       api.get_fwersemail,
-    'fwingsemail':      api.get_fwingsemail,
-    'fwersnumber':      api.get_fwersnumber,
-    'fwingsnumber':     api.get_fwingsnumber,
-    'hashtags':         api.get_hashtags,
-    'info':             api.get_user_info,
-    'likes':            api.get_total_likes,
-    'mediatype':        api.get_media_type,
-    'photodes':         api.get_photo_description,
-    'photos':           api.get_user_photo,
-    'propic':           api.get_user_propic,
-    'stories':          api.get_user_stories,
-    'tagged':           api.get_people_tagged_by_user,
-    'target':           api.change_target,
-    'wcommented':       api.get_people_who_commented,
-    'wtagged':          api.get_people_who_tagged
+    '1':            api.get_followers,
+    '2':            api.get_followings,
+    '3':            api.get_detail_followers,
+    '4':            api.get_detail_followings,
+    'target':       api.change_target,
 }
 
 

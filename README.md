@@ -1,5 +1,5 @@
 # Osintgram CSV VERSION
-THIS REPO ONLY UPDATE VERSION OF [Osintgram](https://github.com/Datalux/Osintgrami). 
+THIS REPO ONLY UPDATE VERSION OF [Osintgram](https://github.com/Datalux/Osintgram). 
 OUTPUT WILL BE CSV NOT TXT OR JSON ONLY.
 
 [![version-1.3](https://img.shields.io/badge/version-1.3-green)](https://github.com/Datalux/Osintgram/releases/tag/1.3)
