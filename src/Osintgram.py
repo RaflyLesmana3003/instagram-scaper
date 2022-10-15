@@ -554,7 +554,7 @@ class Osintgram:
         return True
 
     def send_notif(self, chat_id, text):
-        url = "https://api.telegram.org/bot5427338300:AAGAGvX_UxauRnPUTp-iqNCi7K6VjyfBIHA/sendMessage?chat_id={}&text={}".format(chat_id, text)
+        url = "https://api.telegram.org//sendMessage?chat_id={}&text={}".format(chat_id, text)
         # with open("config/settings.json", 'w') as f:
         #     f.write("{}")
         # u = config.getUsername()
