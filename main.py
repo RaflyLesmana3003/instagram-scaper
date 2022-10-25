@@ -29,6 +29,8 @@ def printlogo():
     print("Get detail data of target followers")
     pc.printout("4\t")
     print("Get detail data target followings")
+    pc.printout("5\t")
+    print("Search detail by query")
     pc.printout("target\t")
     print("Change target")
 
@@ -42,6 +44,8 @@ def cmdlist():
     print("Get detail data of target followers")
     pc.printout("4\t")
     print("Get detail data target followings")
+    pc.printout("5\t")
+    print("Search detail by query")
     pc.printout("target\t")
     print("Change target")
 
@@ -97,6 +101,7 @@ commands = {
     '2':            api.get_followings,
     '3':            api.get_detail_followers,
     '4':            api.get_detail_followings,
+    '5':            api.search_username,
     'target':       api.change_target,
 }
 

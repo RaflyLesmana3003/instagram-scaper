@@ -21,6 +21,7 @@ from instagram_private_api import ClientCookieExpiredError, ClientLoginRequiredE
 from prettytable import PrettyTable
 from src import printcolors as pc
 from src import config
+from instagrapi import Client
 
 
 class Osintgram:
@@ -522,6 +523,33 @@ class Osintgram:
 
         text = "Success fetched all {} followers phone number. \n".format(self.target)
         self.send_notif(chat_id=-660426638,text=text)
+
+    def search_username(self):
+        pc.printout("input search query? ", pc.YELLOW)
+        name = input()
+        target_phone = self.output_dir + "/result_" + name +  "/" + "user_phone.csv"
+        os.makedirs(os.path.dirname(target_phone), exist_ok=True)
+
+        target_email = self.output_dir + "/result_" + name +  "/" + "user_email.csv"
+        os.makedirs(os.path.dirname(target_email), exist_ok=True)
+
+        result = self.api.search_users(name)
+        for user in result.get('users', []):
+                try:
+                    user = self.api.user_info(str(user['pk']))
+                    if 'contact_phone_number' in user['user'] and user['user']['contact_phone_number']:
+                        with open(target_phone, 'a') as f:
+                            writer = csv.writer(f)
+                            writer.writerow([str(user['user']['pk']), user['user']['username'], user['user']['full_name'],user['user']['contact_phone_number'],'contact_phone_number'])
+                    
+                    if 'public_email' in user['user'] and user['user']['public_email']:
+                        with open(target_email, 'a') as f:
+                            writer = csv.writer(f)
+                            writer.writerow([str(user['user']['pk']), user['user']['username'], user['user']['full_name'],user['user']['public_email'],'email'])
+                except Exception as e:
+                    print("\nError.")
+                    print(str(e))
+
 
     def do_random_req(self):
         if self.check_private_profile():
